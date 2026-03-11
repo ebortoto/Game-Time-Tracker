@@ -20,6 +20,7 @@ var (
 	viewAddr        uintptr
 	mappingHandle   uintptr
 	overlayReady    bool
+	lastSentText    string
 
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
 	procOpenFileMappingW = kernel32.NewProc("OpenFileMappingW")
@@ -70,10 +71,14 @@ func InitOverlay() {
 	// Calculate the exact memory address where the text needs to go
 	osdEntryAddr = addr + uintptr(*osdArrOffsetPtr)
 	overlayReady = true
+	lastSentText = ""
 }
 
 func UpdateText(text string) {
 	if !overlayReady || osdFramePtr == nil || osdEntryAddr == 0 {
+		return
+	}
+	if text == lastSentText {
 		return
 	}
 
@@ -86,8 +91,7 @@ func UpdateText(text string) {
 
 	// Increment the frame counter. This tells the RTSS engine "Hey, the text changed, redraw it!"
 	*osdFramePtr++
-
-	fmt.Printf("Sent to RTSS: %s\n", text)
+	lastSentText = text
 }
 
 func CloseOverlay() {
@@ -103,4 +107,5 @@ func CloseOverlay() {
 	osdArrOffsetPtr = nil
 	osdFramePtr = nil
 	osdEntryAddr = 0
+	lastSentText = ""
 }

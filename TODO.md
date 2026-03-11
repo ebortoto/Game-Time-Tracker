@@ -57,23 +57,24 @@ Derived from PRD.md + current implementation state.
 
 ## 3) Storage and persistence
 
-- [ ] Replace hardcoded game list with config file
+- [x] Replace hardcoded game list with config file
   - Add config file (config.json or config.yaml).
   - Fields: list of watched process names.
   - Load on startup with validation and fallback error message.
   - Acceptance: add/remove games without recompiling.
 
-- [ ] Create storage package for history
+- [x] Create storage package for history
   - Suggested file: internal/storage/storage.go.
   - Add model: `GameName`, `TotalTimeSecs`, `LastPlayedDate`.
   - Implement `LoadHistory(path)` and `SaveHistory(path, data)`.
   - Acceptance: data survives app restart.
 
-- [ ] Persist playtime on events
+- [x] Persist playtime on events
   - Save when tracked game closes.
   - Save when app shuts down.
   - Keep in-memory session deltas merged into historical totals.
   - Acceptance: historical totals increase correctly across sessions.
+  - Status: game-close transition triggers snapshot persistence and shutdown path performs final save.
 
 ## 4) Concurrency architecture for TUI
 

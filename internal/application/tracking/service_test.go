@@ -29,14 +29,34 @@ func (f *fakeOverlay) UpdateText(text string) {
 type fakeHistoryRepo struct {
 	saved      []historydomain.Entry
 	shouldFail bool
+	saveCalls  int
 }
 
 func (f *fakeHistoryRepo) Save(entries []historydomain.Entry) error {
 	if f.shouldFail {
 		return errors.New("save failed")
 	}
+	f.saveCalls++
 	f.saved = append([]historydomain.Entry(nil), entries...)
 	return nil
+}
+
+type sequenceScanner struct {
+	results []fakeScanner
+	index   int
+}
+
+func (s *sequenceScanner) Scan() (bool, string, bool) {
+	if len(s.results) == 0 {
+		return false, "", false
+	}
+	if s.index >= len(s.results) {
+		last := s.results[len(s.results)-1]
+		return last.found, last.gameName, last.focused
+	}
+	r := s.results[s.index]
+	s.index++
+	return r.found, r.gameName, r.focused
 }
 
 func TestServiceTickWhenFocusedShowsPlaying(t *testing.T) {
@@ -44,6 +64,7 @@ func TestServiceTickWhenFocusedShowsPlaying(t *testing.T) {
 	overlay := &fakeOverlay{}
 	repo := &fakeHistoryRepo{}
 	svc := NewServiceWithHistory(scanner, overlay, repo)
+	svc.scanInterval = 0
 
 	svc.Tick()
 
@@ -59,6 +80,7 @@ func TestServiceTickWhenFoundButNotFocusedShowsPaused(t *testing.T) {
 	scanner := fakeScanner{found: true, gameName: "PapersPlease.exe", focused: false}
 	overlay := &fakeOverlay{}
 	svc := NewServiceWithHistory(scanner, overlay, nil)
+	svc.scanInterval = 0
 
 	svc.Tick()
 
@@ -71,6 +93,7 @@ func TestServiceTickWhenNoGameShowsWaiting(t *testing.T) {
 	scanner := fakeScanner{found: false}
 	overlay := &fakeOverlay{}
 	svc := NewService(scanner, overlay)
+	svc.scanInterval = 0
 
 	svc.Tick()
 
@@ -84,6 +107,7 @@ func TestSaveHistorySnapshotSavesEntries(t *testing.T) {
 	overlay := &fakeOverlay{}
 	repo := &fakeHistoryRepo{}
 	svc := NewServiceWithHistory(scanner, overlay, repo)
+	svc.scanInterval = 0
 
 	svc.Tick()
 	svc.PauseAll()
@@ -105,9 +129,30 @@ func TestSaveHistorySnapshotPropagatesSaveError(t *testing.T) {
 	overlay := &fakeOverlay{}
 	repo := &fakeHistoryRepo{shouldFail: true}
 	svc := NewServiceWithHistory(scanner, overlay, repo)
+	svc.scanInterval = 0
 
 	err := svc.SaveHistorySnapshot()
 	if err == nil {
 		t.Fatal("expected save error, got nil")
+	}
+}
+
+func TestServiceTickSavesOnceWhenGameCloses(t *testing.T) {
+	scanner := &sequenceScanner{results: []fakeScanner{
+		{found: true, gameName: "PapersPlease.exe", focused: true},
+		{found: false, gameName: "", focused: false},
+		{found: false, gameName: "", focused: false},
+	}}
+	overlay := &fakeOverlay{}
+	repo := &fakeHistoryRepo{}
+	svc := NewServiceWithHistory(scanner, overlay, repo)
+	svc.scanInterval = 0
+
+	svc.Tick()
+	svc.Tick()
+	svc.Tick()
+
+	if repo.saveCalls != 1 {
+		t.Fatalf("expected one save call after game close, got: %d", repo.saveCalls)
 	}
 }

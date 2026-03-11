@@ -29,6 +29,14 @@ type Service struct {
 	overlay     OverlayWriter
 	historyRepo HistoryRepository
 	stopwatches map[string]*trackingdomain.Stopwatch
+	hadGame     bool
+
+	lastScanAt   time.Time
+	scanInterval time.Duration
+
+	currentFound   bool
+	currentGame    string
+	currentFocused bool
 }
 
 func NewService(scanner Scanner, overlay OverlayWriter) *Service {
@@ -37,30 +45,34 @@ func NewService(scanner Scanner, overlay OverlayWriter) *Service {
 
 func NewServiceWithHistory(scanner Scanner, overlay OverlayWriter, historyRepo HistoryRepository) *Service {
 	return &Service{
-		scanner:     scanner,
-		overlay:     overlay,
-		historyRepo: historyRepo,
-		stopwatches: make(map[string]*trackingdomain.Stopwatch),
+		scanner:      scanner,
+		overlay:      overlay,
+		historyRepo:  historyRepo,
+		stopwatches:  make(map[string]*trackingdomain.Stopwatch),
+		scanInterval: 1 * time.Second,
 	}
 }
 
 func (s *Service) Tick() {
+	now := time.Now()
+	if s.lastScanAt.IsZero() || now.Sub(s.lastScanAt) >= s.scanInterval {
+		s.scanState()
+		s.lastScanAt = now
+	}
+	s.renderOverlay()
+}
+
+func (s *Service) scanState() {
 	found, gameName, focused := s.scanner.Scan()
+	s.currentFound = found
+	s.currentGame = gameName
+	s.currentFocused = focused
 
 	if found {
+		s.hadGame = true
 		if _, exists := s.stopwatches[gameName]; !exists {
 			s.stopwatches[gameName] = &trackingdomain.Stopwatch{}
 		}
-		watch := s.stopwatches[gameName]
-
-		if focused {
-			watch.Start()
-			s.overlay.UpdateText(fmt.Sprintf("[PLAYING]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
-			return
-		}
-
-		watch.Pause()
-		s.overlay.UpdateText(fmt.Sprintf("[PAUSED]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
 		return
 	}
 
@@ -69,6 +81,28 @@ func (s *Service) Tick() {
 			watch.Pause()
 		}
 	}
+	if s.hadGame {
+		if err := s.SaveHistorySnapshot(); err != nil {
+			fmt.Println("Error saving history after game close:", err)
+		}
+		s.hadGame = false
+	}
+}
+
+func (s *Service) renderOverlay() {
+	if s.currentFound {
+		watch := s.stopwatches[s.currentGame]
+		if s.currentFocused {
+			watch.Start()
+			s.overlay.UpdateText(fmt.Sprintf("[PLAYING]\n%s\n%s", s.currentGame, formatDuration(watch.Elapsed())))
+			return
+		}
+
+		watch.Pause()
+		s.overlay.UpdateText(fmt.Sprintf("[PAUSED]\n%s\n%s", s.currentGame, formatDuration(watch.Elapsed())))
+		return
+	}
+
 	s.overlay.UpdateText("Waiting for game...")
 }
 
