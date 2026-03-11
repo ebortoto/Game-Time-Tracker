@@ -28,10 +28,32 @@ func (c *Config) Scan() (bool, string, bool) {
 		fmt.Println("Erro ao obter janela em foco:", err)
 	}
 
+	// 1.1 Primeiro, resolve diretamente o processo em foco para evitar flapping
+	// quando há múltiplas instâncias/processos auxiliares do mesmo jogo.
+	if focoPID != 0 {
+		procFoco, err := process.NewProcess(int32(focoPID))
+		if err == nil {
+			nomeFoco, err := procFoco.Name()
+			if err == nil {
+				nomeFocoLower := strings.ToLower(nomeFoco)
+				for _, jogo := range c.TargetGames {
+					if nomeFocoLower == jogo {
+						return true, nomeFoco, true
+					}
+				}
+			}
+		}
+	}
+
 	processos, err := process.Processes()
 	if err != nil {
 		return false, "", false
 	}
+
+	// Como o processo em foco já foi validado acima, aqui basta descobrir
+	// se algum jogo alvo está em execução (estado pausado).
+	encontrouJogo := false
+	nomeEncontrado := ""
 
 	for _, p := range processos {
 		nome, err := p.Name()
@@ -43,17 +65,17 @@ func (c *Config) Scan() (bool, string, bool) {
 
 		for _, jogo := range c.TargetGames {
 			if nomeMinusculo == jogo {
-				// Jogo Encontrado!
-
-				// Verifica se o PID do jogo é igual ao PID da janela em foco
-				estaEmFoco := false
-				if uint32(p.Pid) == focoPID {
-					estaEmFoco = true
+				encontrouJogo = true
+				if nomeEncontrado == "" {
+					nomeEncontrado = nome
 				}
-
-				return true, nome, estaEmFoco
+				break
 			}
 		}
+	}
+
+	if encontrouJogo {
+		return true, nomeEncontrado, false
 	}
 
 	return false, "", false

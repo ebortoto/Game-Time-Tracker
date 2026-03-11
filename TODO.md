@@ -4,7 +4,7 @@ Derived from PRD.md + current implementation state.
 
 ## 0) New mandatory requirement: DDD + refactor
 
-- [ ] Implement the project using Domain-Driven Design (DDD)
+- [x] Implement the project using Domain-Driven Design (DDD)
   - Organize code by domain boundaries, not by technical utility only.
   - Proposed bounded contexts:
     - `tracking` (game session detection and stopwatch rules)
@@ -14,7 +14,7 @@ Derived from PRD.md + current implementation state.
     - `console` (TUI as presentation layer)
   - Acceptance: core business logic can run without RTSS/TUI dependencies.
 
-- [ ] Refactor code to DDD layers
+- [x] Refactor code to DDD layers
   - `domain`: entities, value objects, domain services, repository interfaces.
   - `application`: use cases (start tracking, tick, pause, save history, shutdown).
   - `infrastructure`: process scanner adapter, file/json storage, RTSS adapter.
@@ -26,6 +26,8 @@ Derived from PRD.md + current implementation state.
   - Replace direct package coupling in `main.go` with application services.
   - Introduce interfaces for scanner, overlay writer, and history repository.
   - Acceptance: major flows are testable via mocks/fakes without OS process scanning.
+  - Status: stopwatch moved to domain, main wired to application service, scanner/overlay interfaces introduced.
+  - Remaining: add history repository interface and unit tests for domain/application rules.
 
 ## 1) Critical fixes (do first)
 
