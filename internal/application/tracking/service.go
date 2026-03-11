@@ -78,6 +78,24 @@ func (s *Service) PauseAll() {
 	}
 }
 
+func (s *Service) SaveHistorySnapshot() error {
+	if s.historyRepo == nil {
+		return nil
+	}
+
+	now := time.Now()
+	entries := make([]historydomain.Entry, 0, len(s.stopwatches))
+	for gameName, watch := range s.stopwatches {
+		entries = append(entries, historydomain.Entry{
+			GameName:       gameName,
+			TotalTimeSecs:  int64(watch.Elapsed() / time.Second),
+			LastPlayedDate: now,
+		})
+	}
+
+	return s.historyRepo.Save(entries)
+}
+
 func formatDuration(d time.Duration) string {
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60

@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	apptracking "game-time-tracker/internal/application/tracking"
@@ -37,7 +40,21 @@ func main() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		service.Tick()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	for {
+		select {
+		case <-ticker.C:
+			service.Tick()
+		case sig := <-sigCh:
+			fmt.Printf("Received signal %s, shutting down...\n", sig)
+			service.PauseAll()
+			if err := service.SaveHistorySnapshot(); err != nil {
+				fmt.Println("Error saving history during shutdown:", err)
+			}
+			return
+		}
 	}
 }

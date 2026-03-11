@@ -31,7 +31,7 @@ Derived from PRD.md + current implementation state.
 
 ## 1) Critical fixes (do first)
 
-- [ ] Fix RTSS memory lifetime in internal/ui/overlay.go
+- [x] Fix RTSS memory lifetime in internal/ui/overlay.go
   - Remove `defer procUnmapViewOfFile.Call(addr)` from InitOverlay.
   - Remove `defer procCloseHandle.Call(handle)` from InitOverlay.
   - Keep mapped address and handle in package-level vars.
@@ -39,20 +39,21 @@ Derived from PRD.md + current implementation state.
   - Add nil/zero guards in `UpdateText` to avoid invalid writes.
   - Acceptance: overlay updates work for minutes without crash/access violation.
 
-- [ ] Remove obsolete always-on-top code path
+- [x] Remove obsolete always-on-top code path
   - Delete `detector.SetAlwaysOnTop("GameTimerOverlay")` usage in main.go.
   - Remove unused topmost helpers/constants in internal/detector/windows.go.
   - Acceptance: build passes and behavior is unchanged for RTSS overlay text.
 
 ## 2) Graceful shutdown
 
-- [ ] Handle SIGINT/SIGTERM in main.go
+- [x] Handle SIGINT/SIGTERM in main.go
   - Use `os/signal` and `syscall`.
   - Stop ticker cleanly.
   - Pause all running stopwatches before exit.
   - Trigger final persistence save.
   - Call `ui.CloseOverlay()` before exit.
   - Acceptance: Ctrl+C exits cleanly with no data loss.
+  - Status: signal-driven shutdown added in main loop; shutdown now pauses timers and triggers final snapshot save through the application service.
 
 ## 3) Storage and persistence
 
