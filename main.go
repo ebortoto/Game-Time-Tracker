@@ -43,14 +43,17 @@ func main() {
 	scanner := infrascanner.NewProcessScanner(cfg.WatchedProcesses)
 	overlay := infraoverlay.NewRTSSOverlay()
 	service := apptracking.NewServiceWithHistory(scanner, overlay, historyRepo)
+	runtime := apptracking.NewRuntime(service, 200*time.Millisecond)
 
 	// 2. Initialize the interface
 	overlay.Init()
 	defer overlay.Close()
 
-	// 3. Main loop: refresh overlay frequently; scanner polling stays throttled in service.
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
+	// 3. Run scanner/tracking in a background goroutine.
+	runtime.Start()
+	statusCh := runtime.StatusUpdates()
+	historyCh := runtime.HistoryUpdates()
+	errCh := runtime.Errors()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -58,12 +61,17 @@ func main() {
 
 	for {
 		select {
-		case <-ticker.C:
-			service.Tick()
+		case <-statusCh:
+			// Reserved for TUI status rendering on main thread.
+		case <-historyCh:
+			// Reserved for TUI/dashboard history refresh events.
+		case err := <-errCh:
+			if err != nil {
+				fmt.Println("Runtime error:", err)
+			}
 		case sig := <-sigCh:
 			fmt.Printf("Received signal %s, shutting down...\n", sig)
-			service.PauseAll()
-			if err := service.SaveHistorySnapshot(); err != nil {
+			if err := runtime.Stop(); err != nil {
 				fmt.Println("Error saving history during shutdown:", err)
 			}
 			return

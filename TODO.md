@@ -78,11 +78,12 @@ Derived from PRD.md + current implementation state.
 
 ## 4) Concurrency architecture for TUI
 
-- [ ] Move scanner loop to background goroutine
+- [x] Move scanner loop to background goroutine
   - Keep TUI on main thread.
   - Use channels for scanner status + history updates.
   - Protect shared maps/state (single owner goroutine or mutex).
   - Acceptance: no data races under `go test -race` (or `go run -race`).
+  - Status: added application runtime goroutine with status/history channels; main thread now orchestrates signals and consumes update streams.
 
 ## 5) Terminal UI (Bubble Tea)
 

@@ -25,11 +25,12 @@ type HistoryRepository interface {
 
 // Service coordinates tracking use-cases without binding to infrastructure details.
 type Service struct {
-	scanner     Scanner
-	overlay     OverlayWriter
-	historyRepo HistoryRepository
-	stopwatches map[string]*trackingdomain.Stopwatch
-	hadGame     bool
+	scanner        Scanner
+	overlay        OverlayWriter
+	historyRepo    HistoryRepository
+	stopwatches    map[string]*trackingdomain.Stopwatch
+	hadGame        bool
+	onHistorySaved func(entries []historydomain.Entry)
 
 	lastScanAt   time.Time
 	scanInterval time.Duration
@@ -37,6 +38,14 @@ type Service struct {
 	currentFound   bool
 	currentGame    string
 	currentFocused bool
+}
+
+// StatusSnapshot represents the current tracking state for external consumers.
+type StatusSnapshot struct {
+	Found    bool
+	GameName string
+	Focused  bool
+	Elapsed  time.Duration
 }
 
 func NewService(scanner Scanner, overlay OverlayWriter) *Service {
@@ -112,12 +121,44 @@ func (s *Service) PauseAll() {
 	}
 }
 
+func (s *Service) SetHistorySavedHandler(handler func(entries []historydomain.Entry)) {
+	s.onHistorySaved = handler
+}
+
+func (s *Service) CurrentStatus() StatusSnapshot {
+	status := StatusSnapshot{
+		Found:    s.currentFound,
+		GameName: s.currentGame,
+		Focused:  s.currentFocused,
+	}
+	if !s.currentFound {
+		return status
+	}
+
+	watch, ok := s.stopwatches[s.currentGame]
+	if !ok {
+		return status
+	}
+	status.Elapsed = watch.Elapsed()
+	return status
+}
+
 func (s *Service) SaveHistorySnapshot() error {
 	if s.historyRepo == nil {
 		return nil
 	}
 
-	now := time.Now()
+	entries := s.buildHistoryEntries(time.Now())
+	if err := s.historyRepo.Save(entries); err != nil {
+		return err
+	}
+	if s.onHistorySaved != nil {
+		s.onHistorySaved(append([]historydomain.Entry(nil), entries...))
+	}
+	return nil
+}
+
+func (s *Service) buildHistoryEntries(now time.Time) []historydomain.Entry {
 	entries := make([]historydomain.Entry, 0, len(s.stopwatches))
 	for gameName, watch := range s.stopwatches {
 		entries = append(entries, historydomain.Entry{
@@ -126,8 +167,7 @@ func (s *Service) SaveHistorySnapshot() error {
 			LastPlayedDate: now,
 		})
 	}
-
-	return s.historyRepo.Save(entries)
+	return entries
 }
 
 func formatDuration(d time.Duration) string {
