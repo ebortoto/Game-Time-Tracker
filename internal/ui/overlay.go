@@ -1,56 +1,95 @@
 package ui
 
 import (
-	"image/color"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
+	"fmt"
+	"syscall"
+	"unsafe"
 )
 
-type Overlay struct {
-	App    fyne.App
-	Window fyne.Window
-	Label  *canvas.Text // Usamos canvas.Text para ter mais controle de cor/tamanho
-}
+const (
+	// Windows API constant for read/write access to shared memory
+	fileMapAllAccess = 0xF001F
+	// The specific name RTSS uses for its shared memory block
+	rtssMemoryName = "RTSSSharedMemoryV2"
+)
 
-func NewOverlay() *Overlay {
-	a := app.New()
-	w := a.NewWindow("GameTimerOverlay") // Esse título é usado pelo windows.go para achar a janela
+var (
+	osdArrOffsetPtr *uint32
+	osdFramePtr     *uint32
+	osdEntryAddr    uintptr
+	mappedViewAddr  uintptr
+	mappingHandle   uintptr
+	initialized     bool
+)
 
-	// Configuração Visual
-	w.SetDecored(false) // Remove barra de título, botão fechar, bordas (fica flutuante)
-	w.Resize(fyne.NewSize(200, 50))
+func InitOverlay() {
+	// Load the Windows kernel32 DLL to access memory mapping functions
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	procOpenFileMappingW := kernel32.NewProc("OpenFileMappingW")
+	procMapViewOfFile := kernel32.NewProc("MapViewOfFile")
+	procUnmapViewOfFile := kernel32.NewProc("UnmapViewOfFile")
+	procCloseHandle := kernel32.NewProc("CloseHandle")
 
-	// Criando o texto
-	texto := canvas.NewText("Aguardando...", color.White)
-	texto.TextSize = 20 // Tamanho da fonte
-	texto.TextStyle = fyne.TextStyle{Bold: true}
-	texto.Alignment = fyne.TextAlignCenter
+	namePtr, _ := syscall.UTF16PtrFromString(rtssMemoryName)
 
-	// Fundo preto semi-transparente para ler melhor
-	fundo := canvas.NewRectangle(color.RGBA{R: 0, G: 0, B: 0, A: 200})
+	// 1. Open the RTSS Shared Memory block
+	handle, _, err := procOpenFileMappingW.Call(
+		uintptr(fileMapAllAccess),
+		0,
+		uintptr(unsafe.Pointer(namePtr)),
+	)
 
-	// Organiza layout (Fundo atrás, Texto na frente)
-	conteudo := container.New(layout.NewMaxLayout(), fundo, container.NewCenter(texto))
-	w.SetContent(conteudo)
-
-	// Posicionar no canto superior direito (Gambiarra simples)
-	// O ideal seria pegar a resolução da tela, mas fixaremos uma posição inicial
-	w.Move(fyne.NewPos(1500, 50)) // Ajuste esses valores conforme sua tela (X, Y)
-
-	return &Overlay{
-		App:    a,
-		Window: w,
-		Label:  texto,
+	if handle == 0 {
+		fmt.Printf("Could not open RTSS shared memory. Is RTSS running? Error: %v\n", err)
+		return
 	}
+	mappingHandle = handle
+
+	// 2. Map the memory into our Go program's address space
+	addr, _, err := procMapViewOfFile.Call(
+		handle,
+		uintptr(fileMapAllAccess),
+		0, 0, 0,
+	)
+
+	if addr == 0 {
+		fmt.Printf("Could not map view of file: %v\n", err)
+		procCloseHandle.Call(handle)
+		mappingHandle = 0
+		return
+	}
+	mappedViewAddr = addr
+
+	fmt.Println("Successfully connected to RTSS Shared Memory!")
+
+	// 3. Navigate the RTSS C-Struct in memory
+	// The OSD Array Offset is 24 bytes into the struct.
+	// The OSD Frame Counter is 32 bytes into the struct.
+	osdArrOffsetPtr = (*uint32)(unsafe.Pointer(addr + 24))
+	osdFramePtr = (*uint32)(unsafe.Pointer(addr + 32))
+
+	// Calculate the exact memory address where the text needs to go
+	osdEntryAddr = addr + uintptr(*osdArrOffsetPtr)
+	initialized = true
+
+	_ = procUnmapViewOfFile
+	_ = procCloseHandle
 }
 
-// UpdateText atualiza o texto da interface de forma segura
-func (o *Overlay) UpdateText(texto string, cor color.Color) {
-	o.Label.Text = texto
-	o.Label.Color = cor
-	o.Label.Refresh()
+func UpdateText(texto string) {
+	if !initialized || osdFramePtr == nil || osdEntryAddr == 0 {
+		return
+	}
+
+	// 4. Write our timer string to the memory address
+	textBytes := append([]byte(texto), 0) // It must be a null-terminated C-string
+
+	// Create a Go slice pointing directly to that block of shared memory and copy our text in
+	dest := unsafe.Slice((*byte)(unsafe.Pointer(osdEntryAddr)), len(textBytes))
+	copy(dest, textBytes)
+
+	// Increment the frame counter. This tells the RTSS engine "Hey, the text changed, redraw it!"
+	*osdFramePtr++
+
+	fmt.Printf("Sent to RTSS: %s\n", texto)
 }
