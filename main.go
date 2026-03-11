@@ -18,6 +18,7 @@ func main() {
 
 	// 2. Inicializa a Interface
 	ui.InitOverlay()
+	defer ui.CloseOverlay()
 
 	// 3. Loop principal: mantém o processo vivo e atualiza o monitor a cada segundo.
 	ticker := time.NewTicker(1 * time.Second)
@@ -25,7 +26,6 @@ func main() {
 
 	for range ticker.C {
 		encontrado, nomeJogo, emFoco := monitor.Scan()
-		detector.SetAlwaysOnTop("GameTimerOverlay")
 
 		if encontrado {
 			if _, existe := cronometros[nomeJogo]; !existe {

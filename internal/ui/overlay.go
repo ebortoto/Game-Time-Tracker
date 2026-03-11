@@ -17,16 +17,18 @@ var (
 	osdArrOffsetPtr *uint32
 	osdFramePtr     *uint32
 	osdEntryAddr    uintptr
+	viewAddr        uintptr
+	mappingHandle   uintptr
+	overlayReady    bool
+
+	kernel32             = syscall.NewLazyDLL("kernel32.dll")
+	procOpenFileMappingW = kernel32.NewProc("OpenFileMappingW")
+	procMapViewOfFile    = kernel32.NewProc("MapViewOfFile")
+	procUnmapViewOfFile  = kernel32.NewProc("UnmapViewOfFile")
+	procCloseHandle      = kernel32.NewProc("CloseHandle")
 )
 
 func InitOverlay() {
-	// Load the Windows kernel32 DLL to access memory mapping functions
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	procOpenFileMappingW := kernel32.NewProc("OpenFileMappingW")
-	procMapViewOfFile := kernel32.NewProc("MapViewOfFile")
-	procUnmapViewOfFile := kernel32.NewProc("UnmapViewOfFile")
-	procCloseHandle := kernel32.NewProc("CloseHandle")
-
 	namePtr, _ := syscall.UTF16PtrFromString(rtssMemoryName)
 
 	// 1. Open the RTSS Shared Memory block
@@ -40,7 +42,7 @@ func InitOverlay() {
 		fmt.Printf("Could not open RTSS shared memory. Is RTSS running? Error: %v\n", err)
 		return
 	}
-	defer procCloseHandle.Call(handle)
+	mappingHandle = handle
 
 	// 2. Map the memory into our Go program's address space
 	addr, _, err := procMapViewOfFile.Call(
@@ -51,9 +53,11 @@ func InitOverlay() {
 
 	if addr == 0 {
 		fmt.Printf("Could not map view of file: %v\n", err)
+		procCloseHandle.Call(handle)
+		mappingHandle = 0
 		return
 	}
-	defer procUnmapViewOfFile.Call(addr)
+	viewAddr = addr
 
 	fmt.Println("Successfully connected to RTSS Shared Memory!")
 
@@ -65,9 +69,14 @@ func InitOverlay() {
 
 	// Calculate the exact memory address where the text needs to go
 	osdEntryAddr = addr + uintptr(*osdArrOffsetPtr)
+	overlayReady = true
 }
 
 func UpdateText(texto string) {
+	if !overlayReady || osdFramePtr == nil || osdEntryAddr == 0 {
+		return
+	}
+
 	// 4. Write our timer string to the memory address
 	textBytes := append([]byte(texto), 0) // It must be a null-terminated C-string
 
@@ -79,4 +88,19 @@ func UpdateText(texto string) {
 	*osdFramePtr++
 
 	fmt.Printf("Sent to RTSS: %s\n", texto)
+}
+
+func CloseOverlay() {
+	if viewAddr != 0 {
+		procUnmapViewOfFile.Call(viewAddr)
+		viewAddr = 0
+	}
+	if mappingHandle != 0 {
+		procCloseHandle.Call(mappingHandle)
+		mappingHandle = 0
+	}
+	overlayReady = false
+	osdArrOffsetPtr = nil
+	osdFramePtr = nil
+	osdEntryAddr = 0
 }
