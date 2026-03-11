@@ -17,9 +17,6 @@ var (
 	osdArrOffsetPtr *uint32
 	osdFramePtr     *uint32
 	osdEntryAddr    uintptr
-	mappedViewAddr  uintptr
-	mappingHandle   uintptr
-	initialized     bool
 )
 
 func InitOverlay() {
@@ -43,7 +40,7 @@ func InitOverlay() {
 		fmt.Printf("Could not open RTSS shared memory. Is RTSS running? Error: %v\n", err)
 		return
 	}
-	mappingHandle = handle
+	defer procCloseHandle.Call(handle)
 
 	// 2. Map the memory into our Go program's address space
 	addr, _, err := procMapViewOfFile.Call(
@@ -54,11 +51,9 @@ func InitOverlay() {
 
 	if addr == 0 {
 		fmt.Printf("Could not map view of file: %v\n", err)
-		procCloseHandle.Call(handle)
-		mappingHandle = 0
 		return
 	}
-	mappedViewAddr = addr
+	defer procUnmapViewOfFile.Call(addr)
 
 	fmt.Println("Successfully connected to RTSS Shared Memory!")
 
@@ -70,17 +65,9 @@ func InitOverlay() {
 
 	// Calculate the exact memory address where the text needs to go
 	osdEntryAddr = addr + uintptr(*osdArrOffsetPtr)
-	initialized = true
-
-	_ = procUnmapViewOfFile
-	_ = procCloseHandle
 }
 
 func UpdateText(texto string) {
-	if !initialized || osdFramePtr == nil || osdEntryAddr == 0 {
-		return
-	}
-
 	// 4. Write our timer string to the memory address
 	textBytes := append([]byte(texto), 0) // It must be a null-terminated C-string
 
