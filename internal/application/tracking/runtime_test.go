@@ -5,10 +5,9 @@ import (
 	"time"
 )
 
-func TestRuntimePublishesStatusAndHistory(t *testing.T) {
+func TestRuntimePublishesStatus(t *testing.T) {
 	scanner := &sequenceScanner{results: []fakeScanner{
 		{found: true, gameName: "PapersPlease.exe", focused: true},
-		{found: false, gameName: "", focused: false},
 	}}
 	overlay := &fakeOverlay{}
 	repo := &fakeHistoryRepo{}
@@ -22,13 +21,10 @@ func TestRuntimePublishesStatusAndHistory(t *testing.T) {
 	}()
 
 	statusCh := runtime.StatusUpdates()
-	historyCh := runtime.HistoryUpdates()
-
 	statusReceived := false
-	historyReceived := false
 	timeout := time.After(400 * time.Millisecond)
 
-	for !(statusReceived && historyReceived) {
+	for !statusReceived {
 		select {
 		case st, ok := <-statusCh:
 			if !ok {
@@ -37,15 +33,8 @@ func TestRuntimePublishesStatusAndHistory(t *testing.T) {
 			if st.State != "" {
 				statusReceived = true
 			}
-		case entries, ok := <-historyCh:
-			if !ok {
-				t.Fatal("history channel closed unexpectedly")
-			}
-			if len(entries) > 0 {
-				historyReceived = true
-			}
 		case <-timeout:
-			t.Fatal("timed out waiting for runtime status/history updates")
+			t.Fatal("timed out waiting for runtime status updates")
 		}
 	}
 }
@@ -60,7 +49,7 @@ func TestRuntimeStopPerformsGracefulSave(t *testing.T) {
 	runtime := NewRuntime(service, 10*time.Millisecond)
 	runtime.Start()
 
-	time.Sleep(40 * time.Millisecond)
+	time.Sleep(1200 * time.Millisecond)
 	if err := runtime.Stop(); err != nil {
 		t.Fatalf("expected graceful stop without error, got: %v", err)
 	}

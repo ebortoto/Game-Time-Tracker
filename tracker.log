@@ -1,0 +1,17 @@
+{"time":"2026-03-11T00:04:45.9423203-03:00","level":"INFO","msg":"startup_complete","watched_processes":1,"history_records":0}
+{"time":"2026-03-11T00:04:45.942842-03:00","level":"INFO","msg":"runtime_started","tick_interval_ms":200}
+{"time":"2026-03-11T00:04:46.1578403-03:00","level":"INFO","msg":"tracking_state_changed","state":"paused","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:04:50.5436641-03:00","level":"INFO","msg":"tracking_state_changed","state":"tracking","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:04:56.5542806-03:00","level":"INFO","msg":"tracking_state_changed","state":"paused","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:05:04.3429098-03:00","level":"INFO","msg":"tracking_state_changed","state":"tracking","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:05:19.7545627-03:00","level":"INFO","msg":"tracking_state_changed","state":"paused","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:05:21.5321207-03:00","level":"INFO","msg":"runtime_stopping"}
+{"time":"2026-03-11T00:05:21.5331749-03:00","level":"INFO","msg":"history_saved","entries":1}
+{"time":"2026-03-11T00:05:21.5336919-03:00","level":"INFO","msg":"runtime_stopped"}
+{"time":"2026-03-11T00:05:21.5337246-03:00","level":"INFO","msg":"shutdown_complete"}
+{"time":"2026-03-11T00:08:35.7172312-03:00","level":"INFO","msg":"startup_complete","watched_processes":1,"history_records":1}
+{"time":"2026-03-11T00:08:35.7172312-03:00","level":"INFO","msg":"runtime_started","tick_interval_ms":200}
+{"time":"2026-03-11T00:08:35.9334494-03:00","level":"INFO","msg":"tracking_state_changed","state":"paused","game":"PapersPlease.exe"}
+{"time":"2026-03-11T00:08:50.5376489-03:00","level":"INFO","msg":"runtime_stopping"}
+{"time":"2026-03-11T00:08:50.5376489-03:00","level":"INFO","msg":"runtime_stopped"}
+{"time":"2026-03-11T00:08:50.5376489-03:00","level":"INFO","msg":"shutdown_complete"}

@@ -24,14 +24,22 @@ func (r *JSONRepository) Load() ([]historydomain.Entry, error) {
 	entries := make([]historydomain.Entry, 0, len(records))
 	for _, rec := range records {
 		var lastPlayed time.Time
+		date := rec.Date
 		if rec.LastPlayedDate != "" {
 			parsed, parseErr := time.Parse(time.RFC3339, rec.LastPlayedDate)
 			if parseErr == nil {
 				lastPlayed = parsed
+				if date == "" {
+					date = parsed.Format("2006-01-02")
+				}
 			}
+		}
+		if date == "" {
+			date = time.Now().Format("2006-01-02")
 		}
 		entries = append(entries, historydomain.Entry{
 			GameName:       rec.GameName,
+			Date:           date,
 			TotalTimeSecs:  rec.TotalTimeSecs,
 			LastPlayedDate: lastPlayed,
 		})
@@ -45,20 +53,45 @@ func (r *JSONRepository) Save(entries []historydomain.Entry) error {
 		return err
 	}
 
+	keyFor := func(gameName, date string) string {
+		return gameName + "|" + date
+	}
+
 	merged := make(map[string]storage.GameHistoryRecord, len(existingRecords)+len(entries))
 	for _, rec := range existingRecords {
-		merged[rec.GameName] = rec
+		date := rec.Date
+		if date == "" && rec.LastPlayedDate != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, rec.LastPlayedDate)
+			if parseErr == nil {
+				date = parsed.Format("2006-01-02")
+			}
+		}
+		if date == "" {
+			date = time.Now().Format("2006-01-02")
+		}
+		rec.Date = date
+		merged[keyFor(rec.GameName, rec.Date)] = rec
 	}
 
 	for _, entry := range entries {
-		current := merged[entry.GameName]
+		date := entry.Date
+		if date == "" {
+			if !entry.LastPlayedDate.IsZero() {
+				date = entry.LastPlayedDate.Format("2006-01-02")
+			} else {
+				date = time.Now().Format("2006-01-02")
+			}
+		}
+		k := keyFor(entry.GameName, date)
+		current := merged[k]
 		current.GameName = entry.GameName
+		current.Date = date
 		current.TotalTimeSecs += entry.TotalTimeSecs
 		if entry.LastPlayedDate.IsZero() {
 			entry.LastPlayedDate = time.Now()
 		}
 		current.LastPlayedDate = entry.LastPlayedDate.Format(time.RFC3339)
-		merged[entry.GameName] = current
+		merged[k] = current
 	}
 
 	records := make([]storage.GameHistoryRecord, 0, len(merged))

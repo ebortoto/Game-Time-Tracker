@@ -2,6 +2,7 @@ package tracking
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	historydomain "game-time-tracker/internal/domain/history"
@@ -29,6 +30,9 @@ type Service struct {
 	overlay        OverlayWriter
 	historyRepo    HistoryRepository
 	stopwatches    map[string]*trackingdomain.Stopwatch
+	dailyBaseSecs  map[string]int64
+	persistedSecs  map[string]int64
+	activeDate     string
 	hadGame        bool
 	onHistorySaved func(entries []historydomain.Entry)
 
@@ -54,21 +58,60 @@ func NewService(scanner Scanner, overlay OverlayWriter) *Service {
 
 func NewServiceWithHistory(scanner Scanner, overlay OverlayWriter, historyRepo HistoryRepository) *Service {
 	return &Service{
-		scanner:      scanner,
-		overlay:      overlay,
-		historyRepo:  historyRepo,
-		stopwatches:  make(map[string]*trackingdomain.Stopwatch),
-		scanInterval: 1 * time.Second,
+		scanner:       scanner,
+		overlay:       overlay,
+		historyRepo:   historyRepo,
+		stopwatches:   make(map[string]*trackingdomain.Stopwatch),
+		dailyBaseSecs: make(map[string]int64),
+		persistedSecs: make(map[string]int64),
+		scanInterval:  1 * time.Second,
+	}
+}
+
+func (s *Service) SetInitialHistory(entries []historydomain.Entry, now time.Time) {
+	today := now.Format("2006-01-02")
+	s.activeDate = today
+	for _, entry := range entries {
+		if entry.Date != today {
+			continue
+		}
+		s.dailyBaseSecs[entry.GameName] += entry.TotalTimeSecs
 	}
 }
 
 func (s *Service) Tick() {
 	now := time.Now()
+	today := now.Format("2006-01-02")
+	if s.activeDate == "" {
+		s.activeDate = today
+	} else if today != s.activeDate {
+		s.handleDayRollover(now, today)
+	}
+
 	if s.lastScanAt.IsZero() || now.Sub(s.lastScanAt) >= s.scanInterval {
 		s.scanState()
 		s.lastScanAt = now
 	}
 	s.renderOverlay()
+}
+
+func (s *Service) handleDayRollover(now time.Time, newDate string) {
+	oldDate := s.activeDate
+	for _, watch := range s.stopwatches {
+		watch.Pause()
+	}
+
+	entries := s.buildHistoryEntriesForDate(oldDate, now)
+	if err := s.persistHistoryEntries(entries); err != nil {
+		slog.Error("history_save_day_rollover_failed", "error", err)
+	}
+
+	for gameName := range s.stopwatches {
+		s.stopwatches[gameName] = &trackingdomain.Stopwatch{}
+		s.persistedSecs[gameName] = 0
+	}
+	s.dailyBaseSecs = make(map[string]int64)
+	s.activeDate = newDate
 }
 
 func (s *Service) scanState() {
@@ -92,7 +135,7 @@ func (s *Service) scanState() {
 	}
 	if s.hadGame {
 		if err := s.SaveHistorySnapshot(); err != nil {
-			fmt.Println("Error saving history after game close:", err)
+			slog.Error("history_save_after_game_close_failed", "error", err)
 		}
 		s.hadGame = false
 	}
@@ -103,12 +146,14 @@ func (s *Service) renderOverlay() {
 		watch := s.stopwatches[s.currentGame]
 		if s.currentFocused {
 			watch.Start()
-			s.overlay.UpdateText(fmt.Sprintf("[PLAYING]\n%s\n%s", s.currentGame, formatDuration(watch.Elapsed())))
+			dailyElapsed := watch.Elapsed() + time.Duration(s.dailyBaseSecs[s.currentGame])*time.Second
+			s.overlay.UpdateText(fmt.Sprintf("[PLAYING]\n%s\n%s", s.currentGame, formatDuration(dailyElapsed)))
 			return
 		}
 
 		watch.Pause()
-		s.overlay.UpdateText(fmt.Sprintf("[PAUSED]\n%s\n%s", s.currentGame, formatDuration(watch.Elapsed())))
+		dailyElapsed := watch.Elapsed() + time.Duration(s.dailyBaseSecs[s.currentGame])*time.Second
+		s.overlay.UpdateText(fmt.Sprintf("[PAUSED]\n%s\n%s", s.currentGame, formatDuration(dailyElapsed)))
 		return
 	}
 
@@ -139,7 +184,8 @@ func (s *Service) CurrentStatus() StatusSnapshot {
 	if !ok {
 		return status
 	}
-	status.Elapsed = watch.Elapsed()
+	base := s.dailyBaseSecs[s.currentGame]
+	status.Elapsed = watch.Elapsed() + time.Duration(base)*time.Second
 	return status
 }
 
@@ -149,9 +195,18 @@ func (s *Service) SaveHistorySnapshot() error {
 	}
 
 	entries := s.buildHistoryEntries(time.Now())
+	return s.persistHistoryEntries(entries)
+}
+
+func (s *Service) persistHistoryEntries(entries []historydomain.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	if err := s.historyRepo.Save(entries); err != nil {
+		slog.Error("history_save_failed", "entries", len(entries), "error", err)
 		return err
 	}
+	slog.Info("history_saved", "entries", len(entries))
 	if s.onHistorySaved != nil {
 		s.onHistorySaved(append([]historydomain.Entry(nil), entries...))
 	}
@@ -159,11 +214,28 @@ func (s *Service) SaveHistorySnapshot() error {
 }
 
 func (s *Service) buildHistoryEntries(now time.Time) []historydomain.Entry {
+	date := s.activeDate
+	if date == "" {
+		date = now.Format("2006-01-02")
+		s.activeDate = date
+	}
+	return s.buildHistoryEntriesForDate(date, now)
+}
+
+func (s *Service) buildHistoryEntriesForDate(date string, now time.Time) []historydomain.Entry {
 	entries := make([]historydomain.Entry, 0, len(s.stopwatches))
 	for gameName, watch := range s.stopwatches {
+		sessionSecs := int64(watch.Elapsed() / time.Second)
+		delta := sessionSecs - s.persistedSecs[gameName]
+		if delta <= 0 {
+			continue
+		}
+		s.persistedSecs[gameName] = sessionSecs
+
 		entries = append(entries, historydomain.Entry{
 			GameName:       gameName,
-			TotalTimeSecs:  int64(watch.Elapsed() / time.Second),
+			Date:           date,
+			TotalTimeSecs:  delta,
 			LastPlayedDate: now,
 		})
 	}

@@ -15,9 +15,13 @@ Requirements:
 
 Replace the hardcoded gameList in main.go with a configuration file (e.g., config.json or config.yaml).
 
-Create a local database or JSON file (e.g., playtime_history.json) to store total time played per game.
+Create a local database or JSON file (e.g., playtime_history.json) to store playtime history.
 
-Data Structure: Track at least GameName, TotalTimeSecs, and LastPlayedDate.
+Data Structure: Track at least gameName, date (YYYY-MM-DD), totalTimeSecs, and lastPlayedDate.
+
+Daily Tracking Requirement: Persist daily totals per game so the application can compute "time played today" across restarts.
+
+Daily Data Structure: Track at least gameName, date (YYYY-MM-DD), totalTimeSecs, and lastPlayedDate.
 
 Save Triggers: The app must save the current stopwatch data to the file when a game is closed, or when the tracker itself is shut down.
 
@@ -30,7 +34,7 @@ Implement a TUI using a library like charmbracelet/bubbletea.
 
 View 1 (Dashboard): Show a list of all tracked games and their total historical playtime.
 
-View 2 (Active Status): Show what the background scanner is currently doing (e.g., "Monitoring...", "Tracking CS2 - 00:15:22").
+View 2 (Active Status): Show what the background scanner is currently doing (e.g., "Monitoring...", "Tracking CS2 - 00:15:22"). The timer value must represent playtime accumulated for the current day (not lifetime total).
 
 Concurrency: The TUI must run on the main thread while the ticker loop from your current main.go runs continuously in a separate Goroutine. They should communicate via Go channels.
 
@@ -60,3 +64,20 @@ Storage: Build a storage.go package. Define your structs for saving/loading data
 Concurrency: Move your for range ticker.C loop into a Goroutine so it runs in the background.
 
 TUI: Initialize bubbletea on the main thread. Have your background Goroutine send message updates to the TUI to render the dashboard.
+
+6. Daily Playtime Display (Priority Update)
+To align the overlay and TUI with behavior goals, the displayed timer for active tracking must be "today's total" for the game.
+
+Requirements:
+
+When a tracked game is active, display today's accumulated time (historical today + current session delta).
+
+On startup, load today's persisted value per game and continue from it.
+
+On game close/shutdown, persist only the delta for today so repeated saves do not double count.
+
+Acceptance:
+
+If the app restarts on the same day, the timer resumes from the previously saved daily value.
+
+At day rollover, displayed time resets for the new date while historical daily records remain accessible.

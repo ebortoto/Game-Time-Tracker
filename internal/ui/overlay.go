@@ -20,6 +20,7 @@ var (
 	viewAddr        uintptr
 	mappingHandle   uintptr
 	overlayReady    bool
+	debugEnabled    bool
 	lastSentText    string
 
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
@@ -28,6 +29,10 @@ var (
 	procUnmapViewOfFile  = kernel32.NewProc("UnmapViewOfFile")
 	procCloseHandle      = kernel32.NewProc("CloseHandle")
 )
+
+func SetDebugEnabled(enabled bool) {
+	debugEnabled = enabled
+}
 
 func InitOverlay() {
 	namePtr, _ := syscall.UTF16PtrFromString(rtssMemoryName)
@@ -60,7 +65,9 @@ func InitOverlay() {
 	}
 	viewAddr = addr
 
-	fmt.Println("Successfully connected to RTSS Shared Memory!")
+	if debugEnabled {
+		fmt.Println("Successfully connected to RTSS Shared Memory!")
+	}
 
 	// 3. Navigate the RTSS C-struct in memory.
 	// The OSD Array Offset is 24 bytes into the struct.

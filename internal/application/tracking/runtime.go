@@ -2,6 +2,7 @@ package tracking
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	historydomain "game-time-tracker/internal/domain/history"
@@ -24,6 +25,9 @@ type Runtime struct {
 	historyCh chan []historydomain.Entry
 	errCh     chan error
 	stopReqCh chan chan error
+
+	lastLoggedState string
+	lastLoggedGame  string
 }
 
 func NewRuntime(service *Service, tickInterval time.Duration) *Runtime {
@@ -41,6 +45,7 @@ func NewRuntime(service *Service, tickInterval time.Duration) *Runtime {
 }
 
 func (r *Runtime) Start() {
+	slog.Info("runtime_started", "tick_interval_ms", r.tickInterval.Milliseconds())
 	r.service.SetHistorySavedHandler(func(entries []historydomain.Entry) {
 		r.publishHistory(entries)
 	})
@@ -58,8 +63,14 @@ func (r *Runtime) Start() {
 				r.service.Tick()
 				r.publishStatus(r.service.CurrentStatus())
 			case resp := <-r.stopReqCh:
+				slog.Info("runtime_stopping")
 				r.service.PauseAll()
 				err := r.service.SaveHistorySnapshot()
+				if err != nil {
+					slog.Error("runtime_stop_save_failed", "error", err)
+				} else {
+					slog.Info("runtime_stopped")
+				}
 				resp <- err
 				close(resp)
 				return
@@ -90,6 +101,7 @@ func (r *Runtime) publishStatus(snapshot StatusSnapshot) {
 	status := RuntimeStatus{Updated: time.Now()}
 	if !snapshot.Found {
 		status.State = "monitoring"
+		r.logStateTransition(status)
 		r.sendStatus(status)
 		return
 	}
@@ -101,7 +113,17 @@ func (r *Runtime) publishStatus(snapshot StatusSnapshot) {
 	} else {
 		status.State = "paused"
 	}
+	r.logStateTransition(status)
 	r.sendStatus(status)
+}
+
+func (r *Runtime) logStateTransition(status RuntimeStatus) {
+	if status.State == r.lastLoggedState && status.GameName == r.lastLoggedGame {
+		return
+	}
+	slog.Info("tracking_state_changed", "state", status.State, "game", status.GameName)
+	r.lastLoggedState = status.State
+	r.lastLoggedGame = status.GameName
 }
 
 func (r *Runtime) sendStatus(status RuntimeStatus) {

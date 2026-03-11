@@ -9,6 +9,7 @@ import (
 // GameHistoryRecord is the persisted playtime view per game.
 type GameHistoryRecord struct {
 	GameName       string `json:"gameName"`
+	Date           string `json:"date,omitempty"`
 	TotalTimeSecs  int64  `json:"totalTimeSecs"`
 	LastPlayedDate string `json:"lastPlayedDate"`
 }
