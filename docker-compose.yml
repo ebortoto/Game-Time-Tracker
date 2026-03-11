@@ -1,0 +1,18 @@
+services:
+  tracker-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: game-time-tracker-server
+    environment:
+      TRACKER_API_KEY: ${TRACKER_API_KEY:-change-me}
+    command:
+      - -addr=:8080
+      - -history-file=/data/playtime_history.json
+    ports:
+      - "8080:8080"
+    volumes:
+      - tracker_data:/data
+
+volumes:
+  tracker_data:

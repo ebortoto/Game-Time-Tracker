@@ -1,12 +1,14 @@
 # Game Time Tracker
 
-Local Windows tracker for game sessions with RTSS overlay output and a Bubble Tea terminal dashboard.
+Game tracker split into two runtime components:
+- Client: process scanner + TUI + optional RTSS overlay.
+- Server: authenticated HTTP API + persisted history storage.
 
 ## Requirements
 
-- Windows (RTSS shared memory integration).
 - Go 1.25+
-- RivaTuner Statistics Server (RTSS) running.
+- Windows for RTSS overlay integration.
+- RivaTuner Statistics Server (RTSS) running (client side only, optional when using `-overlay=false`).
 
 ## Setup
 
@@ -27,24 +29,57 @@ go mod tidy
 }
 ```
 
-3. Ensure RTSS is running before starting the tracker.
-
-## Run
+3. Set shared auth key for client/server communication:
 
 ```bash
-go run .
+set TRACKER_API_KEY=change-me
 ```
 
-Enable debug logs (written to `tracker.log`, not to TUI terminal):
+## Run (Split Mode)
+
+1. Start server:
 
 ```bash
-go run . -debug
+go run ./cmd/server -addr :8080 -history-file playtime_history.json
 ```
+
+2. Start client:
+
+```bash
+go run ./cmd/client -server-url http://localhost:8080 -config config.json
+```
+
+Optional client flags:
+- `-debug` writes JSON logs to `tracker.log`.
+- `-overlay=false` disables RTSS output (useful in non-Windows/container runs).
 
 ## Build
 
 ```bash
 go build ./...
+```
+
+Build only server/client binaries:
+
+```bash
+go build ./cmd/server
+go build ./cmd/client
+```
+
+## Docker
+
+Run only the server in Docker:
+
+```bash
+docker compose up --build
+```
+
+Notes:
+- Keep the TUI client on the host OS (recommended for process scanning + RTSS overlay).
+- Start the client against Dockerized server:
+
+```bash
+go run ./cmd/client -server-url http://localhost:8080 -config config.json
 ```
 
 ## Tests
@@ -61,11 +96,12 @@ go test -race ./internal/application/tracking
 
 ## Runtime Behavior
 
-- The tracker runs process scanning in a background runtime goroutine.
-- Bubble Tea TUI runs on the main thread.
-- RTSS overlay shows active state and elapsed timer.
-- History is persisted to `playtime_history.json` when a tracked game closes and during shutdown.
-- Single-instance lock prevents two trackers from running simultaneously.
+- Client runs process scanning in a background runtime goroutine.
+- Bubble Tea TUI runs on the client main thread.
+- RTSS overlay (if enabled) shows active state and elapsed timer.
+- Client pushes history deltas to server on game close and shutdown.
+- Server persists merged history to `playtime_history.json` (or configured file).
+- Single-instance lock prevents two clients from running simultaneously.
 
 ## TUI Controls
 
@@ -77,7 +113,11 @@ go test -race ./internal/application/tracking
 ## Data Files
 
 - `config.json`: watched process configuration.
-- `playtime_history.json`: persisted game totals and last played timestamps.
+- `playtime_history.json`: server-side persisted game totals and last played timestamps.
+
+## API Contract
+
+See `docs/api-contract.md` for auth model and JSON schemas.
 
 ## Logging Strategy
 

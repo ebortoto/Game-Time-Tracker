@@ -1,83 +1,103 @@
 Product Requirements Document (PRD): Game Time Tracker
+
 1. Project Overview
-A lightweight, local Go-based service that monitors system processes to track active game sessions. It provides real-time feedback via an RTSS (RivaTuner Statistics Server) on-screen overlay and logs historical playtime data to help the user review and reduce their gaming habits.
+Game Time Tracker is a Windows-first Go application that detects active games, tracks daily playtime, and presents status in a TUI. The runtime is split into a local client and a server API. The near-term goal is stronger desktop operability (Windows startup + tray UX) and environment-driven deployment with a Dockerized database.
 
-2. Current State vs. Target State
-Current State: The application successfully hardcodes a list of games, detects if they are running and in focus, tracks the session time in memory, and pushes strings to the RTSS shared memory.
+2. Product Direction (March 2026 Update)
+The active objectives are:
 
-Target State: The application needs to persistently save data between sessions, allow dynamic configuration of the "watch list" without recompiling, provide a TUI (Terminal User Interface) dashboard for interaction, and gracefully handle its own lifecycle.
+1. The detection framework must initialize reliably on Windows.
+2. The app must expose a system tray icon that indicates the tracker is running.
+3. Clicking the tray icon must expose an action to open the TUI.
+4. Persistence must move to a database running in Docker for local development.
+5. Runtime configuration must be controlled via environment files.
 
-3. Core Features to Implement
-Feature 1: Configuration & Data Persistence (Storage)
-To track habits over time, the data must survive application restarts.
+3. Current State vs Target State
 
-Requirements:
+Current State:
+- Process scanner and tracking service are working.
+- TUI is implemented with Bubble Tea.
+- Server API exists and currently persists history in JSON.
+- Docker is currently server-only.
 
-Replace the hardcoded gameList in main.go with a configuration file (e.g., config.json or config.yaml).
+Target State:
+- Windows bootstrap path initializes detection and tray integrations safely.
+- Tray icon provides at least Open TUI and Exit actions.
+- Server persists to Dockerized database (instead of JSON) for local runs.
+- Configuration is loaded from .env and environment variables in both server and client.
+- Architecture remains compatible with a future internet-hosted API backend.
 
-Create a local database or JSON file (e.g., playtime_history.json) to store playtime history.
+4. Functional Requirements
 
-Data Structure: Track at least gameName, date (YYYY-MM-DD), totalTimeSecs, and lastPlayedDate.
+Feature A: Windows Detection Initialization
+- On Windows startup, detection dependencies initialize once and fail with actionable logs.
+- Unsupported platforms must fail gracefully for Windows-only features.
+- Acceptance:
+	- Tracker starts and scanner enters monitoring state on Windows.
+	- Startup errors are explicit and include initialization step context.
 
-Daily Tracking Requirement: Persist daily totals per game so the application can compute "time played today" across restarts.
+Feature B: Tray Icon + Open TUI
+- Add a tray icon while the tracker client is running.
+- Tray menu must include:
+	- Open TUI
+	- Exit
+- Open TUI behavior:
+	- If TUI is not open, launch/focus it.
+	- If TUI is already open, do not spawn duplicates.
+- Acceptance:
+	- Tray icon appears after startup.
+	- User can open TUI through tray action.
+	- Exit from tray performs graceful shutdown.
 
-Daily Data Structure: Track at least gameName, date (YYYY-MM-DD), totalTimeSecs, and lastPlayedDate.
+Feature C: Dockerized Database (Local)
+- Replace JSON persistence path with database persistence for local development.
+- Database must run in Docker Compose.
+- Server connects using environment variables (host, port, user, password, db name).
+- Acceptance:
+	- `docker compose up` starts server dependencies, including the database.
+	- Server can read/write playtime history through repository abstraction.
+	- Existing history fields are preserved: gameName, date, totalTimeSecs, lastPlayedDate.
 
-Save Triggers: The app must save the current stopwatch data to the file when a game is closed, or when the tracker itself is shut down.
+Feature D: Environment File Support
+- Add .env-based configuration for server and client.
+- Keep explicit command-line flags as highest precedence.
+- Define and document required and optional variables.
+- Acceptance:
+	- Running with `.env` config does not require hardcoded secrets.
+	- Missing required values fail fast with clear messages.
 
-Feature 2: The Terminal User Interface (TUI)
-The TUI will act as the control panel for the background tracker.
+Feature E: Future Hosted API Compatibility
+- Keep server API contract and client repository abstractions portable.
+- Avoid local-only assumptions in domain/application layers.
+- Acceptance:
+	- Base URL and auth token can be switched by env without code changes.
 
-Requirements:
+5. Non-Functional Requirements
+- Maintain DDD layering and inward dependencies.
+- Keep scanner loop and UI responsive (no blocking tray/UI events).
+- Maintain graceful shutdown semantics.
+- Keep logs structured and concise.
 
-Implement a TUI using a library like charmbracelet/bubbletea.
+6. Constraints and Risks
+- Tray implementation is OS-specific; use build tags for platform code.
+- TUI process lifecycle and tray callbacks require careful synchronization.
+- Database migration from JSON to SQL needs idempotent schema migration and rollback-safe startup.
 
-View 1 (Dashboard): Show a list of all tracked games and their total historical playtime.
+7. Delivery Plan
 
-View 2 (Active Status): Show what the background scanner is currently doing (e.g., "Monitoring...", "Tracking CS2 - 00:15:22"). The timer value must represent playtime accumulated for the current day (not lifetime total).
+Phase 1: Environment + bootstrap foundation
+- Add .env loading and env validation.
+- Add Windows initialization checks and startup diagnostics.
 
-Concurrency: The TUI must run on the main thread while the ticker loop from your current main.go runs continuously in a separate Goroutine. They should communicate via Go channels.
+Phase 2: Tray UX
+- Add tray icon, menu actions, and lifecycle hooks.
+- Add Open TUI behavior with single-instance guard for TUI view.
 
-Feature 3: Graceful Shutdown
-Currently, the program runs infinitely until forcibly killed.
+Phase 3: Dockerized database migration
+- Add DB service to compose.
+- Implement SQL repository and wire it behind existing ports.
+- Keep JSON path optional only as fallback during migration window.
 
-Requirements:
-
-Listen for OS interrupt signals (SIGINT/SIGTERM) using os/signal.
-
-When an interrupt is received, safely stop all active stopwatches, trigger a final save to the persistent storage, unmap the RTSS memory, and then exit.
-
-4. Technical Debt & Refactoring
-Before building new features, the existing code requires a few critical adjustments:
-
-The RTSS Memory Scope Bug: In your overlay.go, the InitOverlay() function maps the view of the file (procMapViewOfFile.Call), but you have defer procUnmapViewOfFile.Call(addr) and defer procCloseHandle.Call(handle). Because of the defer, the memory is unmapped the moment InitOverlay() finishes executing. Subsequent calls to UpdateText will write to a memory address that the program no longer holds, which can cause silent failures or access violations.
-
-Fix: Remove the defer statements from InitOverlay. Create a CloseOverlay() function that handles the unmapping and handle closing, and call defer ui.CloseOverlay() in your main.go.
-
-Remove Unused Fyne Code: In windows.go, the SetAlwaysOnTop function and constants are leftover from a previous GUI approach. Since you are using RTSS for the overlay, detector.SetAlwaysOnTop("GameTimerOverlay") in main.go is unnecessary and should be removed to keep the codebase clean.
-
-5. Recommended Implementation Order
-Refactor: Fix the memory unmapping bug in overlay.go, remove the SetAlwaysOnTop code, and implement a graceful shutdown using os/signal.
-
-Storage: Build a storage.go package. Define your structs for saving/loading data to a JSON file. Test it by loading the file on startup and saving when the ticker detects a game has closed.
-
-Concurrency: Move your for range ticker.C loop into a Goroutine so it runs in the background.
-
-TUI: Initialize bubbletea on the main thread. Have your background Goroutine send message updates to the TUI to render the dashboard.
-
-6. Daily Playtime Display (Priority Update)
-To align the overlay and TUI with behavior goals, the displayed timer for active tracking must be "today's total" for the game.
-
-Requirements:
-
-When a tracked game is active, display today's accumulated time (historical today + current session delta).
-
-On startup, load today's persisted value per game and continue from it.
-
-On game close/shutdown, persist only the delta for today so repeated saves do not double count.
-
-Acceptance:
-
-If the app restarts on the same day, the timer resumes from the previously saved daily value.
-
-At day rollover, displayed time resets for the new date while historical daily records remain accessible.
+Phase 4: Hosted API readiness
+- Harden API/auth configuration via env.
+- Document deployment knobs for remote hosting.

@@ -10,6 +10,62 @@ import (
 	historydomain "game-time-tracker/internal/domain/history"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	appStyle = lipgloss.NewStyle().Padding(1, 2)
+
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("39"))
+
+	subtitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246"))
+
+	activeTabStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("33")).
+			Padding(0, 1)
+
+	inactiveTabStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("250")).
+				Padding(0, 1)
+
+	panelStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("238")).
+			Padding(1, 2)
+
+	headerRowStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("227"))
+
+	rowGameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	rowTimeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("80"))
+	rowDateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+
+	controlsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+
+	statusTrackingStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("35")).
+				Padding(0, 1)
+
+	statusPausedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("232")).
+				Background(lipgloss.Color("214")).
+				Padding(0, 1)
+
+	statusMonitoringStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("232")).
+				Background(lipgloss.Color("250")).
+				Padding(0, 1)
 )
 
 type SignalMsg struct {
@@ -120,27 +176,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	header := "Game Time Tracker\n"
-	tabs := "[1] Dashboard | [2] Active Status\n"
-	controls := "Controls: tab/left/right switch views, q quit\n"
-	line := strings.Repeat("-", 56) + "\n"
-
+	header := titleStyle.Render("Game Time Tracker")
+	tabs := m.renderTabs()
+	subtitle := subtitleStyle.Render("Track daily playtime with live status and persisted history")
 	body := m.dashboardView()
 	if m.viewIndex == 1 {
 		body = m.statusView()
 	}
 
+	controls := controlsStyle.Render("Controls: 1 Dashboard | 2 Active Status | tab/right/left switch views | q quit")
+
 	footer := ""
 	if m.lastErr != "" {
-		footer = "\nLast event: " + m.lastErr + "\n"
+		footer = "\n" + errorStyle.Render("Last event: "+m.lastErr)
 	}
 
-	return header + tabs + line + body + "\n" + controls + footer
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		subtitle,
+		tabs,
+		panelStyle.Render(body),
+		controls,
+	)
+
+	return appStyle.Render(content) + footer + "\n"
 }
 
 func (m Model) dashboardView() string {
 	if len(m.history) == 0 {
-		return "Dashboard\n\nNo history yet.\n"
+		return "Dashboard\n\nNo history yet. Launch a watched game to start collecting playtime."
 	}
 
 	games := make([]string, 0, len(m.history))
@@ -149,16 +214,31 @@ func (m Model) dashboardView() string {
 	}
 	sort.Strings(games)
 
-	lines := []string{"Dashboard", "", "Game                          Total Time   Last Played"}
+	const gameWidth = 30
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		headerRowStyle.Width(gameWidth).Render("Game"),
+		headerRowStyle.Width(12).Render("Total Time"),
+		headerRowStyle.Render("Last Played"),
+	)
+
+	lines := []string{"Dashboard", "", header}
 	for _, game := range games {
 		row := m.history[game]
 		lastPlayed := "-"
 		if !row.lastPlayed.IsZero() {
 			lastPlayed = row.lastPlayed.Format("2006-01-02 15:04:05")
 		}
-		lines = append(lines, fmt.Sprintf("%-28s  %-10s   %s", game, formatSeconds(row.totalSecs), lastPlayed))
+
+		line := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			rowGameStyle.Width(gameWidth).Render(game),
+			rowTimeStyle.Width(12).Render(formatSeconds(row.totalSecs)),
+			rowDateStyle.Render(lastPlayed),
+		)
+		lines = append(lines, line)
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) statusView() string {
@@ -166,25 +246,36 @@ func (m Model) statusView() string {
 	switch m.status.State {
 	case "tracking":
 		lines = append(lines,
-			"State: tracking",
+			"State: "+statusTrackingStyle.Render("TRACKING"),
 			"Game:  "+m.status.GameName,
-			"Time:  "+formatDuration(m.status.Elapsed),
+			"Today: "+formatDuration(m.status.Elapsed),
 		)
 	case "paused":
 		lines = append(lines,
-			"State: paused",
+			"State: "+statusPausedStyle.Render("PAUSED"),
 			"Game:  "+m.status.GameName,
-			"Time:  "+formatDuration(m.status.Elapsed),
+			"Today: "+formatDuration(m.status.Elapsed),
 		)
 	default:
 		lines = append(lines,
-			"State: monitoring",
+			"State: "+statusMonitoringStyle.Render("MONITORING"),
 			"Game:  -",
-			"Time:  00:00:00",
+			"Today: 00:00:00",
 		)
 	}
 	lines = append(lines, "Updated: "+m.status.Updated.Format("15:04:05"))
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderTabs() string {
+	dashboard := inactiveTabStyle.Render("1 Dashboard")
+	status := inactiveTabStyle.Render("2 Active Status")
+	if m.viewIndex == 0 {
+		dashboard = activeTabStyle.Render("1 Dashboard")
+	} else {
+		status = activeTabStyle.Render("2 Active Status")
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, dashboard, " ", status)
 }
 
 func waitForStatus(ch <-chan apptracking.RuntimeStatus) tea.Cmd {
