@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	historydomain "game-time-tracker/internal/domain/history"
 	trackingdomain "game-time-tracker/internal/domain/tracking"
 )
 
@@ -17,17 +18,28 @@ type OverlayWriter interface {
 	UpdateText(text string)
 }
 
+// HistoryRepository is an application port for playtime persistence.
+type HistoryRepository interface {
+	Save(entries []historydomain.Entry) error
+}
+
 // Service coordinates tracking use-cases without binding to infrastructure details.
 type Service struct {
 	scanner     Scanner
 	overlay     OverlayWriter
+	historyRepo HistoryRepository
 	stopwatches map[string]*trackingdomain.Stopwatch
 }
 
 func NewService(scanner Scanner, overlay OverlayWriter) *Service {
+	return NewServiceWithHistory(scanner, overlay, nil)
+}
+
+func NewServiceWithHistory(scanner Scanner, overlay OverlayWriter, historyRepo HistoryRepository) *Service {
 	return &Service{
 		scanner:     scanner,
 		overlay:     overlay,
+		historyRepo: historyRepo,
 		stopwatches: make(map[string]*trackingdomain.Stopwatch),
 	}
 }
@@ -43,12 +55,12 @@ func (s *Service) Tick() {
 
 		if focused {
 			watch.Start()
-			s.overlay.UpdateText(fmt.Sprintf("[JOGANDO]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
+			s.overlay.UpdateText(fmt.Sprintf("[PLAYING]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
 			return
 		}
 
 		watch.Pause()
-		s.overlay.UpdateText(fmt.Sprintf("[PAUSA]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
+		s.overlay.UpdateText(fmt.Sprintf("[PAUSED]\n%s\n%s", gameName, formatDuration(watch.Elapsed())))
 		return
 	}
 
@@ -57,7 +69,7 @@ func (s *Service) Tick() {
 			watch.Pause()
 		}
 	}
-	s.overlay.UpdateText("Aguardando Jogo...")
+	s.overlay.UpdateText("Waiting for game...")
 }
 
 func (s *Service) PauseAll() {

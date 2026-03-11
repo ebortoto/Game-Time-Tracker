@@ -3,31 +3,31 @@ package timer
 import "time"
 
 type Stopwatch struct {
-	inicio    time.Time
-	acumulado time.Duration
-	Rodando   bool
+	startTime time.Time
+	accum     time.Duration
+	Running   bool
 }
 
-// Start começa ou retoma a contagem
+// Start begins or resumes timing.
 func (s *Stopwatch) Start() {
-	if !s.Rodando {
-		s.inicio = time.Now()
-		s.Rodando = true
+	if !s.Running {
+		s.startTime = time.Now()
+		s.Running = true
 	}
 }
 
-// Pause para a contagem e salva o tempo decorrido
+// Pause stops timing and stores the elapsed duration.
 func (s *Stopwatch) Pause() {
-	if s.Rodando {
-		s.acumulado += time.Since(s.inicio)
-		s.Rodando = false
+	if s.Running {
+		s.accum += time.Since(s.startTime)
+		s.Running = false
 	}
 }
 
-// Elapsed retorna o tempo total (acumulado + atual se estiver rodando)
+// Elapsed returns total elapsed time (accumulated + current run if active).
 func (s *Stopwatch) Elapsed() time.Duration {
-	if s.Rodando {
-		return s.acumulado + time.Since(s.inicio)
+	if s.Running {
+		return s.accum + time.Since(s.startTime)
 	}
-	return s.acumulado
+	return s.accum
 }

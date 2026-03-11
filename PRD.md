@@ -13,7 +13,7 @@ To track habits over time, the data must survive application restarts.
 
 Requirements:
 
-Replace the hardcoded listaDeJogos in main.go with a configuration file (e.g., config.json or config.yaml).
+Replace the hardcoded gameList in main.go with a configuration file (e.g., config.json or config.yaml).
 
 Create a local database or JSON file (e.g., playtime_history.json) to store total time played per game.
 

@@ -21,13 +21,13 @@ Derived from PRD.md + current implementation state.
   - `interfaces`: CLI/TUI models and controllers.
   - Acceptance: dependencies point inward (`interfaces` -> `application` -> `domain`).
 
-- [ ] Refactor where needed before adding major features
+- [x] Refactor where needed before adding major features
   - Move stopwatch and playtime rules to domain types with tests.
   - Replace direct package coupling in `main.go` with application services.
   - Introduce interfaces for scanner, overlay writer, and history repository.
   - Acceptance: major flows are testable via mocks/fakes without OS process scanning.
-  - Status: stopwatch moved to domain, main wired to application service, scanner/overlay interfaces introduced.
-  - Remaining: add history repository interface and unit tests for domain/application rules.
+  - Status: stopwatch moved to domain, main wired to application service, scanner/overlay/history repository interfaces introduced.
+  - Completed: unit tests added for domain stopwatch and application tracking service rules.
 
 ## 1) Critical fixes (do first)
 

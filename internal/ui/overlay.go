@@ -61,7 +61,7 @@ func InitOverlay() {
 
 	fmt.Println("Successfully connected to RTSS Shared Memory!")
 
-	// 3. Navigate the RTSS C-Struct in memory
+	// 3. Navigate the RTSS C-struct in memory.
 	// The OSD Array Offset is 24 bytes into the struct.
 	// The OSD Frame Counter is 32 bytes into the struct.
 	osdArrOffsetPtr = (*uint32)(unsafe.Pointer(addr + 24))
@@ -72,13 +72,13 @@ func InitOverlay() {
 	overlayReady = true
 }
 
-func UpdateText(texto string) {
+func UpdateText(text string) {
 	if !overlayReady || osdFramePtr == nil || osdEntryAddr == 0 {
 		return
 	}
 
 	// 4. Write our timer string to the memory address
-	textBytes := append([]byte(texto), 0) // It must be a null-terminated C-string
+	textBytes := append([]byte(text), 0) // It must be a null-terminated C-string.
 
 	// Create a Go slice pointing directly to that block of shared memory and copy our text in
 	dest := unsafe.Slice((*byte)(unsafe.Pointer(osdEntryAddr)), len(textBytes))
@@ -87,7 +87,7 @@ func UpdateText(texto string) {
 	// Increment the frame counter. This tells the RTSS engine "Hey, the text changed, redraw it!"
 	*osdFramePtr++
 
-	fmt.Printf("Sent to RTSS: %s\n", texto)
+	fmt.Printf("Sent to RTSS: %s\n", text)
 }
 
 func CloseOverlay() {

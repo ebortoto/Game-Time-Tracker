@@ -13,27 +13,27 @@ import (
 func main() {
 	releaseLock, alreadyRunning, err := infraruntime.AcquireSingleInstance()
 	if err != nil {
-		fmt.Println("Erro ao iniciar lock de instancia unica:", err)
+		fmt.Println("Error starting single-instance lock:", err)
 		return
 	}
 	if alreadyRunning {
-		fmt.Println("Ja existe outra instancia do Game Time Tracker em execucao.")
+		fmt.Println("Another Game Time Tracker instance is already running.")
 		return
 	}
 	defer releaseLock()
 
-	// 1. Configuração
-	// DICA: Adicione "notepad.exe" ou "calc.exe" (se for a antiga) para testar fácil
-	listaDeJogos := []string{"PapersPlease.exe"}
-	scanner := infrascanner.NewProcessScanner(listaDeJogos)
+	// 1. Configuration
+	// TIP: Add "notepad.exe" or "calc.exe" (legacy version) for quick testing.
+	gameList := []string{"PapersPlease.exe"}
+	scanner := infrascanner.NewProcessScanner(gameList)
 	overlay := infraoverlay.NewRTSSOverlay()
 	service := apptracking.NewService(scanner, overlay)
 
-	// 2. Inicializa a Interface
+	// 2. Initialize the interface
 	overlay.Init()
 	defer overlay.Close()
 
-	// 3. Loop principal: mantém o processo vivo e atualiza o monitor a cada segundo.
+	// 3. Main loop: keeps the process alive and updates tracking once per second.
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
