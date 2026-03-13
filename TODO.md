@@ -19,36 +19,43 @@ Derived from PRD.md + current implementation state.
 
 ## A) Windows Detection Bootstrap
 
-- [ ] Add explicit Windows initialization flow in client startup
+- [x] Add explicit Windows initialization flow in client startup
   - Create `InitializeWindowsRuntime()` in infrastructure layer.
   - Return startup diagnostics instead of silent failures.
+  - Status: startup now calls `InitializeWindowsRuntime()` and logs per-step diagnostics before scanner runtime starts.
 
-- [ ] Add platform guard + fallback messages
+- [x] Add platform guard + fallback messages
   - Use build tags for Windows-specific init path.
   - Print clear warning when Windows-only feature is unavailable.
+  - Status: build-tagged Windows/non-Windows init paths are active and client startup now emits a clear compatibility warning on non-Windows platforms.
 
-- [ ] Add startup integration test for bootstrap path
+- [x] Add startup integration test for bootstrap path
   - Test successful init path with fakes/mocks.
   - Test failure path message and non-zero exit behavior.
+  - Status: added bootstrap integration tests in `cmd/client/main_test.go` with fake runtime initializers covering success, fallback warning, and non-zero failure behavior.
 
 ## B) Tray Icon + Open TUI
 
-- [ ] Add minimal tray package with lifecycle hooks
+- [x] Add minimal tray package with lifecycle hooks
   - Start tray icon on client startup.
   - Stop tray icon on graceful shutdown.
+  - Status: replaced stub lifecycle hooks with a real systray-backed service (`github.com/getlantern/systray`) and kept lifecycle coverage with runtime-fake tests.
 
-- [ ] Add tray menu entries
+- [x] Add tray menu entries
   - Add `Open TUI` action.
   - Add `Exit` action.
+  - Status: tray service now defines `Open TUI` and `Exit` menu entries, supports handlers, and client startup registers both actions.
 
-- [ ] Implement Open TUI command bridge
+- [x] Implement Open TUI command bridge
   - If TUI is closed, open it.
   - If TUI is already open, focus/no-op (no duplicates).
+  - Status: added tray `TUIBridge` with open/close state guard; tray `Open TUI` now triggers open when closed and logs no-op when already open.
 
-- [ ] Add quick manual verification checklist in README
+- [x] Add quick manual verification checklist in README
   - Startup -> icon visible.
   - Open TUI works.
   - Exit from tray shuts down cleanly.
+  - Status: README now includes a tray/TUI verification checklist covering startup, icon visibility, Open TUI behavior, and Exit behavior.
 
 ## C) Dockerized Database (Local First)
 

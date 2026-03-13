@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"encoding/binary"
 	"fmt"
 	"syscall"
 	"unsafe"
@@ -16,20 +17,20 @@ const (
 )
 
 var (
-	osdArrOffsetPtr *uint32
-	osdFramePtr     *uint32
-	osdEntryAddr    uintptr
-	viewAddr        uintptr
-	mappingHandle   uintptr
-	overlayReady    bool
-	debugEnabled    bool
-	lastSentText    string
+	osdFrameAddr  uintptr
+	osdEntryAddr  uintptr
+	viewAddr      uintptr
+	mappingHandle uintptr
+	overlayReady  bool
+	debugEnabled  bool
+	lastSentText  string
 
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
 	procOpenFileMappingW = kernel32.NewProc("OpenFileMappingW")
 	procMapViewOfFile    = kernel32.NewProc("MapViewOfFile")
 	procUnmapViewOfFile  = kernel32.NewProc("UnmapViewOfFile")
 	procCloseHandle      = kernel32.NewProc("CloseHandle")
+	procRtlMoveMemory    = kernel32.NewProc("RtlMoveMemory")
 )
 
 func SetDebugEnabled(enabled bool) {
@@ -74,17 +75,17 @@ func InitOverlay() {
 	// 3. Navigate the RTSS C-struct in memory.
 	// The OSD Array Offset is 24 bytes into the struct.
 	// The OSD Frame Counter is 32 bytes into the struct.
-	osdArrOffsetPtr = (*uint32)(unsafe.Pointer(addr + 24))
-	osdFramePtr = (*uint32)(unsafe.Pointer(addr + 32))
+	osdArrOffset := readUint32At(addr + 24)
+	osdFrameAddr = addr + 32
 
 	// Calculate the exact memory address where the text needs to go
-	osdEntryAddr = addr + uintptr(*osdArrOffsetPtr)
+	osdEntryAddr = addr + uintptr(osdArrOffset)
 	overlayReady = true
 	lastSentText = ""
 }
 
 func UpdateText(text string) {
-	if !overlayReady || osdFramePtr == nil || osdEntryAddr == 0 {
+	if !overlayReady || osdFrameAddr == 0 || osdEntryAddr == 0 {
 		return
 	}
 	if text == lastSentText {
@@ -95,12 +96,43 @@ func UpdateText(text string) {
 	textBytes := append([]byte(text), 0) // It must be a null-terminated C-string.
 
 	// Create a Go slice pointing directly to that block of shared memory and copy our text in
-	dest := unsafe.Slice((*byte)(unsafe.Pointer(osdEntryAddr)), len(textBytes))
-	copy(dest, textBytes)
+	writeBytesAt(osdEntryAddr, textBytes)
 
 	// Increment the frame counter. This tells the RTSS engine "Hey, the text changed, redraw it!"
-	*osdFramePtr++
+	frame := readUint32At(osdFrameAddr)
+	writeUint32At(osdFrameAddr, frame+1)
 	lastSentText = text
+}
+
+func readUint32At(addr uintptr) uint32 {
+	var raw [4]byte
+	procRtlMoveMemory.Call(
+		uintptr(unsafe.Pointer(&raw[0])),
+		addr,
+		uintptr(len(raw)),
+	)
+	return binary.LittleEndian.Uint32(raw[:])
+}
+
+func writeUint32At(addr uintptr, value uint32) {
+	var raw [4]byte
+	binary.LittleEndian.PutUint32(raw[:], value)
+	procRtlMoveMemory.Call(
+		addr,
+		uintptr(unsafe.Pointer(&raw[0])),
+		uintptr(len(raw)),
+	)
+}
+
+func writeBytesAt(addr uintptr, data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	procRtlMoveMemory.Call(
+		addr,
+		uintptr(unsafe.Pointer(&data[0])),
+		uintptr(len(data)),
+	)
 }
 
 func CloseOverlay() {
@@ -113,8 +145,7 @@ func CloseOverlay() {
 		mappingHandle = 0
 	}
 	overlayReady = false
-	osdArrOffsetPtr = nil
-	osdFramePtr = nil
+	osdFrameAddr = 0
 	osdEntryAddr = 0
 	lastSentText = ""
 }

@@ -52,6 +52,102 @@ go run ./cmd/client -server-url http://localhost:8080 -config config.json
 Optional client flags:
 - `-debug` writes JSON logs to `tracker.log`.
 - `-overlay=false` disables RTSS output (useful in non-Windows/container runs).
+- `-start-hidden=true` starts directly in system tray without opening TUI.
+
+## Run Detection In Background (Windows)
+
+Use this when you want the detection client running without keeping an open terminal.
+
+1. Build the client executable:
+
+```powershell
+go build -o .\bin\tracker-client.exe .\cmd\client
+```
+
+2. Ensure server is running (local or Docker):
+
+```powershell
+docker compose up -d
+```
+
+3. Start the detection client in background:
+
+```powershell
+$env:TRACKER_SERVER_URL = "http://localhost:8080"
+$env:TRACKER_API_KEY = "change-me"
+Start-Process -FilePath ".\bin\tracker-client.exe" -ArgumentList "-config=config.json","-overlay=true","-start-hidden=true"
+```
+
+4. Stop background client later:
+
+```powershell
+$p = Get-Process tracker-client -ErrorAction SilentlyContinue
+if ($p) { $p | Stop-Process -Force }
+```
+
+Optional: auto-start at Windows logon with Task Scheduler.
+- Program/script: full path to `tracker-client.exe`
+- Arguments: `-config=config.json -overlay=true`
+- Start in: project folder path
+
+## Manual Verification Checklist (Tray + TUI)
+
+Use this quick checklist after starting server and client.
+
+1. Startup
+- Client process starts without startup errors.
+- Tray service starts (check logs for tray startup entries).
+
+2. Tray visibility
+- Tray icon is visible in Windows notification area.
+
+3. Open TUI action
+- Click tray `Show` once: TUI opens.
+- Click tray `Show` again while TUI is already open: no duplicate TUI instance is created.
+- Close TUI window: app keeps running in tray.
+
+4. Exit action
+- Click tray `Exit`: client stops gracefully.
+- Verify process is no longer running:
+
+```powershell
+Get-Process tracker-client -ErrorAction SilentlyContinue
+```
+
+## How To Use (Quick Flow)
+
+Use this sequence for normal daily usage on Windows.
+
+1. Start the server:
+
+```powershell
+docker compose up -d
+```
+
+2. Start the client in background:
+
+```powershell
+$env:TRACKER_SERVER_URL = "http://localhost:8080"
+$env:TRACKER_API_KEY = "change-me"
+Start-Process -FilePath ".\bin\tracker-client.exe" -ArgumentList "-config=config.json","-overlay=true","-start-hidden=true"
+```
+
+3. Open the TUI from tray:
+- Click the tray icon.
+- Click `Show`.
+
+4. Check if client is running:
+
+```powershell
+Get-Process tracker-client -ErrorAction SilentlyContinue
+```
+
+5. Stop the client safely:
+
+```powershell
+$p = Get-Process tracker-client -ErrorAction SilentlyContinue
+if ($p) { $p | Stop-Process -Force }
+```
 
 ## Build
 

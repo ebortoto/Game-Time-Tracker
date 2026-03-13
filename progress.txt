@@ -1,0 +1,36 @@
+2026-03-11
+- Completed TODO A.1: added explicit Windows initialization flow via internal/infrastructure/runtime.InitializeWindowsRuntime().
+- Wired client startup to execute runtime initialization and emit startup diagnostics per step.
+- Added non-Windows test coverage for initialization diagnostics.
+- Validation run: go test ./... (pass), go vet ./... (reports existing unsafe-pointer warnings in internal/ui/overlay.go).
+
+2026-03-11
+- Completed TODO A.2: platform guard + fallback messages for Windows-only runtime features.
+- Client startup now prints/logs a clear warning when running outside Windows.
+- Validation run: go test ./... (pass), go vet ./... (reports existing unsafe-pointer warnings in internal/ui/overlay.go).
+
+2026-03-11
+- Completed TODO A.3: startup integration test for bootstrap path.
+- Refactored bootstrap into `runWindowsBootstrap` for testability and explicit non-zero exit handling in main startup.
+- Added tests with fake initializers for success, non-Windows fallback warning, and failure exit code behavior.
+- Validation run: go test ./... (pass), go vet ./... (reports existing unsafe-pointer warnings in internal/ui/overlay.go).
+
+2026-03-11
+- Completed TODO B.1: minimal tray package with lifecycle hooks.
+- Added `internal/infrastructure/tray` service and wired client startup/shutdown to Start/Stop it.
+- Added tray lifecycle tests, including idempotent Start/Stop behavior.
+
+2026-03-11
+- Completed TODO B.2: tray menu entries.
+- Added tray actions for `Open TUI` and `Exit`, with handler registration and trigger flow.
+- Wired client startup to register both tray handlers.
+
+2026-03-11
+- Completed TODO B.3: Open TUI command bridge.
+- Added tray `TUIBridge` to open only when closed and prevent duplicate open requests.
+- Wired tray `Open TUI` handler to bridge with explicit no-op behavior while already open.
+- Added bridge unit tests for success, no-duplicate, reopen-after-close, and error paths.
+
+2026-03-11
+- Completed TODO B.4: manual verification checklist for tray + TUI.
+- Added README checklist covering startup, tray icon visibility, Open TUI behavior, and Exit behavior.

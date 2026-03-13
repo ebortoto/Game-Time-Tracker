@@ -89,6 +89,39 @@ Phase 1: Environment + bootstrap foundation
 - Add .env loading and env validation.
 - Add Windows initialization checks and startup diagnostics.
 
+8. Implementation Progress
+
+- 2026-03-11: Completed the first Windows bootstrap task.
+	- Added `InitializeWindowsRuntime()` in infrastructure runtime layer with platform-specific implementations.
+	- Client startup now runs initialization before scanner runtime and logs per-step diagnostics.
+	- Added a non-Windows bootstrap test to verify diagnostic behavior on unsupported platforms.
+
+- 2026-03-11: Completed platform guard and fallback messaging task.
+	- Confirmed build-tagged Windows/non-Windows initialization paths.
+	- Client now prints and logs an explicit fallback warning when running outside Windows.
+
+- 2026-03-11: Completed startup integration test task for bootstrap path.
+	- Refactored client bootstrap sequence into a testable helper (`runWindowsBootstrap`).
+	- Added tests with fake runtime initializers for success, non-Windows fallback messaging, and non-zero exit behavior on initialization failure.
+
+- 2026-03-11: Completed minimal tray lifecycle hook task.
+	- Added `internal/infrastructure/tray` service with start/stop lifecycle API.
+	- Client startup now starts tray service and stops it during shutdown via deferred cleanup.
+	- Added unit tests for tray lifecycle and idempotent start/stop behavior.
+
+- 2026-03-11: Completed tray menu entry task.
+	- Added explicit tray menu actions for `Open TUI` and `Exit` in tray infrastructure service.
+	- Added handler registration/trigger API and test coverage for action dispatch.
+	- Client now registers handlers for both tray menu actions during startup.
+
+- 2026-03-11: Completed Open TUI command bridge task.
+	- Added `TUIBridge` component to coordinate open requests and avoid duplicate TUI opens.
+	- Wired tray `Open TUI` action to bridge behavior with open/no-op logging.
+	- Added unit tests covering open when closed, no-op when open, reopen after close, and opener error handling.
+
+- 2026-03-11: Completed tray/TUI manual verification checklist task.
+	- Added a practical checklist in README covering startup, tray icon visibility, Open TUI behavior, and Exit behavior.
+
 Phase 2: Tray UX
 - Add tray icon, menu actions, and lifecycle hooks.
 - Add Open TUI behavior with single-instance guard for TUI view.
