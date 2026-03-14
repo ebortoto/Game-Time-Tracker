@@ -2,10 +2,19 @@
 
 Base path: `/v1`
 
+Base URL:
+- Configurable by client `TRACKER_SERVER_URL` (or `-server-url`).
+- Local example: `http://localhost:8080`
+- Hosted example: `https://tracker-api.example.com`
+
 Authentication:
 - Required for history endpoints when server `TRACKER_API_KEY` is configured.
 - Preferred header: `Authorization: Bearer <token>`.
 - Fallback header: `X-API-Key: <token>`.
+
+Token examples:
+- Local development token: `change-me`
+- Hosted token: secret-managed production token value
 
 ## Health Check
 

@@ -134,3 +134,15 @@ Phase 3: Dockerized database migration
 Phase 4: Hosted API readiness
 - Harden API/auth configuration via env.
 - Document deployment knobs for remote hosting.
+
+9. Deployment Notes (Hosted Readiness)
+
+Local-first baseline:
+- Server and MySQL run with Docker Compose.
+- Client runs on host OS and calls server via configured base URL.
+
+Hosted migration path:
+- Reuse the existing `/v1` API contract and auth model.
+- Deploy server and MySQL to hosted infrastructure.
+- Configure client with hosted `TRACKER_SERVER_URL` and `TRACKER_API_KEY`.
+- Keep runtime endpoint selection entirely env/flag-driven (no code changes required).

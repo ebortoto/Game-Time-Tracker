@@ -98,6 +98,7 @@ type Model struct {
 	status    apptracking.RuntimeStatus
 	history   map[string]historyRow
 	lastErr   string
+	exitApp   bool
 }
 
 func NewModel(
@@ -138,6 +139,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.exitApp = true
+			m.lastErr = "quit requested"
+			return m, tea.Quit
+		case "m":
+			m.lastErr = "minimized to tray"
 			return m, tea.Quit
 		case "tab", "right":
 			m.viewIndex = (m.viewIndex + 1) % 2
@@ -151,6 +157,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case SignalMsg:
 		m.lastErr = fmt.Sprintf("received signal %s", msg.Signal)
+		if msg.Signal == "tray_exit" || msg.Signal == "interrupt" || msg.Signal == "terminated" {
+			m.exitApp = true
+		}
 		return m, tea.Quit
 	case statusMsg:
 		m.status = msg.status
@@ -184,7 +193,7 @@ func (m Model) View() string {
 		body = m.statusView()
 	}
 
-	controls := controlsStyle.Render("Controls: 1 Dashboard | 2 Active Status | tab/right/left switch views | q quit")
+	controls := controlsStyle.Render("Controls: 1 Dashboard | 2 Active Status | tab/right/left switch views | m minimize to tray | q quit app")
 
 	footer := ""
 	if m.lastErr != "" {
@@ -306,6 +315,10 @@ func waitForError(ch <-chan error) tea.Cmd {
 		}
 		return runtimeErrMsg{err: err}
 	}
+}
+
+func (m Model) ExitRequested() bool {
+	return m.exitApp
 }
 
 func formatDuration(d time.Duration) string {

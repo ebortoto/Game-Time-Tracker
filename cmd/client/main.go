@@ -34,12 +34,17 @@ type overlayAdapter interface {
 type runtimeInitializer func() (infraruntime.StartupDiagnostics, error)
 
 func main() {
+	if err := configuration.LoadDotEnv(".env"); err != nil {
+		fmt.Println("Error loading .env:", err)
+		return
+	}
+
 	debug := flag.Bool("debug", false, "enable debug logs in tracker.log")
-	serverURL := flag.String("server-url", "", "tracking server base URL (fallback: TRACKER_SERVER_URL)")
-	apiKeyFlag := flag.String("api-key", "", "tracking server API key (fallback: TRACKER_API_KEY)")
-	configPath := flag.String("config", "config.json", "tracker config file")
-	overlayEnabled := flag.Bool("overlay", true, "enable RTSS overlay output")
-	startHidden := flag.Bool("start-hidden", false, "start in tray without opening TUI")
+	serverURL := flag.String("server-url", configuration.EnvOrDefault("TRACKER_SERVER_URL", ""), "tracking server base URL (fallback: TRACKER_SERVER_URL)")
+	apiKeyFlag := flag.String("api-key", configuration.EnvOrDefault("TRACKER_API_KEY", ""), "tracking server API key (fallback: TRACKER_API_KEY)")
+	configPath := flag.String("config", configuration.EnvOrDefault("TRACKER_CLIENT_CONFIG", "config.json"), "tracker config file")
+	overlayEnabled := flag.Bool("overlay", configuration.BoolEnvOrDefault("TRACKER_OVERLAY", true), "enable RTSS overlay output")
+	startHidden := flag.Bool("start-hidden", configuration.BoolEnvOrDefault("TRACKER_START_HIDDEN", false), "start in tray without opening TUI")
 	flag.Parse()
 
 	if *debug {
@@ -56,18 +61,12 @@ func main() {
 	ui.SetDebugEnabled(*debug)
 
 	url := strings.TrimSpace(*serverURL)
-	if url == "" {
-		url = strings.TrimSpace(os.Getenv("TRACKER_SERVER_URL"))
-	}
-	if url == "" {
-		fmt.Println("Error: missing server URL. Set -server-url or TRACKER_SERVER_URL.")
+	if err := configuration.ValidateClientEnv(url); err != nil {
+		fmt.Println("Error:", err)
 		return
 	}
 
 	apiKey := strings.TrimSpace(*apiKeyFlag)
-	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("TRACKER_API_KEY"))
-	}
 
 	if code := runWindowsBootstrap(infraruntime.InitializeWindowsRuntime, os.Stdout); code != 0 {
 		os.Exit(code)
@@ -202,10 +201,10 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
-	runTUI := func() error {
+	runTUI := func() (bool, error) {
 		releaseConsole, err := infraruntime.EnsureConsoleWindow()
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer releaseConsole()
 
@@ -214,8 +213,18 @@ func main() {
 		setActiveProgram(program)
 		defer clearActiveProgram(program)
 		fmt.Print("\033[H\033[2J")
-		_, err = program.Run()
-		return err
+		finalModel, err := program.Run()
+		if err != nil {
+			return false, err
+		}
+		switch m := finalModel.(type) {
+		case tui.Model:
+			return m.ExitRequested(), nil
+		case *tui.Model:
+			return m.ExitRequested(), nil
+		default:
+			return false, nil
+		}
 	}
 
 	if !*startHidden {
@@ -230,11 +239,17 @@ func main() {
 	for !shutdownRequested {
 		select {
 		case <-openTUIReqCh:
-			if err := runTUI(); err != nil {
+			exitRequested, err := runTUI()
+			if err != nil {
 				slog.Error("tui_runtime_error", "error", err)
 				fmt.Println("TUI runtime error:", err)
 			}
 			tuiBridge.MarkClosed()
+			if exitRequested {
+				slog.Info("tui_quit_app_requested")
+				shutdownRequested = true
+				continue
+			}
 			slog.Info("tui_closed_to_tray")
 		case <-exitReqCh:
 			shutdownRequested = true

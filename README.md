@@ -35,6 +35,47 @@ go mod tidy
 set TRACKER_API_KEY=change-me
 ```
 
+## Environment Files (.env)
+
+Create your local `.env` from the template:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The app now auto-loads `.env` for both server and client startup.
+Precedence order is:
+
+1. CLI flags (highest)
+2. Process environment variables
+3. `.env` file
+4. Built-in defaults
+
+### Local Run With .env
+
+Set values in `.env` (for example `TRACKER_SERVER_URL`, `TRACKER_API_KEY`, `TRACKER_CLIENT_CONFIG`) and run without repeating flags:
+
+```bash
+go run ./cmd/server
+go run ./cmd/client
+```
+
+### Docker Compose Env Flow
+
+`docker-compose.yml` reads `TRACKER_API_KEY` from your shell environment or `.env` file.
+
+```bash
+docker compose up -d
+```
+
+If `TRACKER_API_KEY` is not set, compose uses fallback `change-me` from the compose file.
+
 ## Run (Split Mode)
 
 1. Start server:
@@ -164,13 +205,16 @@ go build ./cmd/client
 
 ## Docker
 
-Run only the server in Docker:
+Run server + MySQL in Docker:
 
 ```bash
 docker compose up --build
 ```
 
 Notes:
+- `tracker-server` now depends on a MySQL service with healthcheck.
+- Server uses `HISTORY_BACKEND=mysql` by default in compose.
+- Startup runs SQL migration `migrations/001_create_daily_history.sql` automatically before serving traffic.
 - Keep the TUI client on the host OS (recommended for process scanning + RTSS overlay).
 - Start the client against Dockerized server:
 
@@ -214,6 +258,38 @@ go test -race ./internal/application/tracking
 ## API Contract
 
 See `docs/api-contract.md` for auth model and JSON schemas.
+
+## API Base URL and Token
+
+Use `TRACKER_SERVER_URL` and `TRACKER_API_KEY` (or `-server-url` / `-api-key`) to switch between local and hosted APIs without code changes.
+
+Local example:
+
+```powershell
+$env:TRACKER_SERVER_URL = "http://localhost:8080"
+$env:TRACKER_API_KEY = "change-me"
+```
+
+Remote hosted example:
+
+```powershell
+$env:TRACKER_SERVER_URL = "https://tracker-api.example.com"
+$env:TRACKER_API_KEY = "prod-token-from-secret-manager"
+```
+
+The client sends auth as `Authorization: Bearer <token>` (fallback `X-API-Key`).
+
+## Deployment Notes
+
+Current local stack:
+- `docker compose up` runs `tracker-server` + MySQL.
+- Client runs on host OS and points to server via `TRACKER_SERVER_URL`.
+
+Migration path to hosted stack:
+- Keep the same API contract and client remote repository.
+- Deploy server + MySQL to hosted infrastructure.
+- Set hosted `TRACKER_SERVER_URL` and `TRACKER_API_KEY` in client environment.
+- Keep `HISTORY_BACKEND=mysql` in server environment and provide hosted DB connection env vars.
 
 ## Logging Strategy
 

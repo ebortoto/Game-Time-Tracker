@@ -1,4 +1,23 @@
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: game-time-tracker-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-change-me}
+      MYSQL_DATABASE: ${DB_NAME:-game_time_tracker}
+      MYSQL_USER: ${DB_USER:-tracker}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   tracker-server:
     build:
       context: .
@@ -6,13 +25,23 @@ services:
     container_name: game-time-tracker-server
     environment:
       TRACKER_API_KEY: ${TRACKER_API_KEY:-change-me}
+      HISTORY_BACKEND: ${HISTORY_BACKEND:-mysql}
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-tracker}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_NAME:-game_time_tracker}
     command:
       - -addr=:8080
       - -history-file=/data/playtime_history.json
+    depends_on:
+      mysql:
+        condition: service_healthy
     ports:
       - "8080:8080"
     volumes:
       - tracker_data:/data
 
 volumes:
+  mysql_data:
   tracker_data:
